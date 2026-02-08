@@ -99,19 +99,21 @@ function App() {
       )}
 
       {/* Térkép */}
-      <Map 
-        onLocationSelect={handleLocationSelect} 
-        refreshTrigger={refreshTrigger}
-      />
+     <Map 
+  onLocationSelect={handleLocationSelect} 
+  refreshTrigger={refreshTrigger}
+/>
 
-      {/* Bejelentő űrlap modal */}
-      {showForm && selectedLocation && (
-        <ReportForm
-          location={selectedLocation}
-          onClose={handleCloseForm}
-          onSubmitSuccess={handleSubmitSuccess}
-        />
-      )}
+{/* Bejelentő űrlap modal - Csomagoljuk be egy magas z-indexű divbe */}
+{showForm && selectedLocation && (
+  <div className="relative z-[9999]"> 
+    <ReportForm
+      location={selectedLocation}
+      onClose={handleCloseForm}
+      onSubmitSuccess={handleSubmitSuccess}
+    />
+  </div>
+)}
 
       {/* Footer */}
       <Footer />
