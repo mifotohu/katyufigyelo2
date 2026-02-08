@@ -69,22 +69,24 @@ export const getPotholeReports = async () => {
 // Új kátyúbejelentés létrehozása
 export const createPotholeReport = async (reportData) => {
   try {
-    // Ellenőrizzük, hogy van-e már bejelentés ezen a koordinátán (50m távolságon belül)
-    const { data: existing } = await supabase
+    // Normalizált cím (kis betűs, trimelt) az összehasonlításhoz
+    const normalizedAddress = reportData.address.toLowerCase().trim()
+    
+    // Ellenőrizzük, hogy van-e már bejelentés UGYANAZON CÍMEN (case-insensitive)
+    const { data: existingByAddress } = await supabase
       .from('pothole_reports')
       .select('*')
-      .gte('latitude', reportData.latitude - 0.0005)
-      .lte('latitude', reportData.latitude + 0.0005)
-      .gte('longitude', reportData.longitude - 0.0005)
-      .lte('longitude', reportData.longitude + 0.0005)
+      .ilike('address', normalizedAddress) // case-insensitive keresés
+      .limit(1)
 
-    // Ha van közeli bejelentés, növeljük a számlálót
-    if (existing && existing.length > 0) {
-      const existingReport = existing[0]
+    // Ha van ugyanazon címen bejelentés, növeljük a számlálót
+    if (existingByAddress && existingByAddress.length > 0) {
+      const existingReport = existingByAddress[0]
       const { data, error } = await supabase
         .from('pothole_reports')
         .update({ 
           report_count: existingReport.report_count + 1,
+          last_reported_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', existingReport.id)
@@ -94,10 +96,41 @@ export const createPotholeReport = async (reportData) => {
       return { data: data[0], error: null, isDuplicate: true }
     }
 
-    // Új bejelentés létrehozása
+    // Ha nincs, ellenőrizzük a közelség alapján (50m távolságon belül)
+    const { data: existingByLocation } = await supabase
+      .from('pothole_reports')
+      .select('*')
+      .gte('latitude', reportData.latitude - 0.0005)
+      .lte('latitude', reportData.latitude + 0.0005)
+      .gte('longitude', reportData.longitude - 0.0005)
+      .lte('longitude', reportData.longitude + 0.0005)
+      .limit(1)
+
+    // Ha van közeli bejelentés (kb. 50m-en belül), növeljük a számlálót
+    if (existingByLocation && existingByLocation.length > 0) {
+      const existingReport = existingByLocation[0]
+      const { data, error } = await supabase
+        .from('pothole_reports')
+        .update({ 
+          report_count: existingReport.report_count + 1,
+          last_reported_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingReport.id)
+        .select()
+
+      if (error) throw error
+      return { data: data[0], error: null, isDuplicate: true }
+    }
+
+    // Új bejelentés létrehozása (nincs duplikáció)
     const { data, error } = await supabase
       .from('pothole_reports')
-      .insert([reportData])
+      .insert([{
+        ...reportData,
+        report_count: 1,
+        last_reported_at: new Date().toISOString()
+      }])
       .select()
 
     if (error) throw error
@@ -108,30 +141,4 @@ export const createPotholeReport = async (reportData) => {
   }
 }
 
-// Fotó feltöltése Supabase Storage-ba
-export const uploadPotholePhoto = async (file, reportId) => {
-  try {
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${reportId}-${Date.now()}.${fileExt}`
-    const filePath = `pothole-photos/${fileName}`
-
-    const { data, error } = await supabase.storage
-      .from('potholes')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      })
-
-    if (error) throw error
-
-    // Nyilvános URL lekérése
-    const { data: publicUrlData } = supabase.storage
-      .from('potholes')
-      .getPublicUrl(filePath)
-
-    return { url: publicUrlData.publicUrl, error: null }
-  } catch (error) {
-    console.error('Hiba a fotó feltöltésekor:', error)
-    return { url: null, error }
-  }
-}
+// Fotó feltöltés törölve - nincs rá szükség az új verzióban
