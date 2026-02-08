@@ -21,5 +21,10 @@ export default defineConfig({
         }
       }
     }
+  },
+  // Leaflet asset-ek helyes kezelése Vercel-en
+  assetsInclude: ['**/*.png', '**/*.svg'],
+  optimizeDeps: {
+    include: ['leaflet']
   }
 })

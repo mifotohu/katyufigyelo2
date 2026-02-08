@@ -8,9 +8,9 @@ export default {
     extend: {
       colors: {
         'pothole': {
-          'safe': '#3B82F6',      // Kék - 1-5 bejelentés
-          'warning': '#FBBF24',   // Sárga - 6-10 bejelentés
-          'danger': '#EF4444',    // Piros - 10+ bejelentés
+          'safe': '#3B82F6',      // Kék - 1-10 bejelentés
+          'warning': '#FBBF24',   // Sárga - 11-30 bejelentés
+          'danger': '#EF4444',    // Piros - 30+ bejelentés
         }
       },
       animation: {
