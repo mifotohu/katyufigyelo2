@@ -75,10 +75,13 @@ const Footer = () => {
         {/* Alsó sor: Copyright */}
         <div className="border-t border-gray-800 pt-2">
           <div className="flex flex-col md:flex-row items-center justify-between gap-2 text-xs">
-            <p className="text-gray-500 text-xs">
+            <p className="text-gray-500 text-xs text-center md:text-left">
               © 2026 Kátyúfigyelő. 
               <Heart className="w-3 h-3 inline mx-1 text-red-500" />
               Közösségért.
+              <span className="block md:inline md:ml-2 text-gray-600">
+                ✨ Vibe coding-gal készült, AI segítségével.
+              </span>
             </p>
             <div className="flex items-center gap-3 text-gray-600 text-xs">
               <span>🔒 Biztonságos</span>

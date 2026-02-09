@@ -76,18 +76,20 @@ const MapClickHandler = ({ onLocationSelect }) => {
 
   // Magyarország határai (approximate bounding box)
   const isInHungary = (lat, lng) => {
-    // Magyarország határai (kis pufferrel)
+    // Magyarország határai (szigorúbb ellenőrzés)
     const HUNGARY_BOUNDS = {
-      north: 48.6,   // Észak (Szlovákia határ)
-      south: 45.7,   // Dél (Horvátország határ)
-      west: 16.1,    // Nyugat (Ausztria határ)
-      east: 22.9     // Kelet (Ukrajna/Románia határ)
+      north: 48.585,  // Észak (Szlovákia határ)
+      south: 45.74,   // Dél (Horvátország határ)
+      west: 16.11,    // Nyugat (Ausztria határ)
+      east: 22.90     // Kelet (Ukrajna/Románia határ)
     }
     
-    return lat >= HUNGARY_BOUNDS.south && 
-           lat <= HUNGARY_BOUNDS.north && 
-           lng >= HUNGARY_BOUNDS.west && 
-           lng <= HUNGARY_BOUNDS.east
+    const withinBounds = lat >= HUNGARY_BOUNDS.south && 
+                        lat <= HUNGARY_BOUNDS.north && 
+                        lng >= HUNGARY_BOUNDS.west && 
+                        lng <= HUNGARY_BOUNDS.east
+    
+    return withinBounds
   }
 
   useMapEvents({
@@ -96,8 +98,11 @@ const MapClickHandler = ({ onLocationSelect }) => {
 
       // Ellenőrizzük, hogy Magyarország területén van-e
       if (!isInHungary(lat, lng)) {
-        alert('⚠️ Csak Magyarország területén lehet kátyút bejelenteni!')
-        return
+        // Alert üzenet
+        alert('⚠️ Csak Magyarország területén lehet kátyút bejelenteni!\n\n' +
+              'Kérlek, kattints a térképre Magyarország határain belül.')
+        return // NEM hozunk létre markert és NEM nyitjuk meg a form-ot
+      }
       }
 
       // Reverse geocoding OpenStreetMap Nominatim API-val
@@ -252,7 +257,7 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
   }
 
   return (
-    <div className="relative flex-1 min-h-[75vh]">{/* 75% viewport magasság */}
+    <div className="relative flex-1 min-h-[75vh] z-0">{/* z-0 hozzáadva - háttérbe */}
       {/* Betöltés jelző */}
       {isLoading && (
         <div className="absolute inset-0 bg-white/90 z-[1000] flex items-center justify-center">

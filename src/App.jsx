@@ -60,7 +60,7 @@ function App() {
 
       {/* Értesítés */}
       {notification && (
-        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+        <div className="fixed top-4 right-4 z-[10000] animate-slide-in-right">{/* z-index növelve 10000-re */}
           <div
             className={`rounded-lg shadow-lg p-4 flex items-start gap-3 max-w-md ${
               notification.type === 'success'
