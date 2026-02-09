@@ -94,11 +94,13 @@ function App() {
         </div>
       )}
 
-      {/* Térkép */}
-      <Map 
-        onLocationSelect={handleLocationSelect} 
-        refreshTrigger={refreshTrigger}
-      />
+      {/* Térkép - Wrapper max magassággal */}
+      <div className="flex-1 max-h-[55vh] md:max-h-[60vh] lg:max-h-[65vh] overflow-hidden">
+        <Map 
+          onLocationSelect={handleLocationSelect} 
+          refreshTrigger={refreshTrigger}
+        />
+      </div>
 
       {/* Bejelentő űrlap modal - Magas z-indexszel */}
       {showForm && selectedLocation && (
