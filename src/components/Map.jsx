@@ -103,7 +103,7 @@ const MapClickHandler = ({ onLocationSelect }) => {
               'Kérlek, kattints a térképre Magyarország határain belül.')
         return // NEM hozunk létre markert és NEM nyitjuk meg a form-ot
       }
-      }
+   
 
       // Reverse geocoding OpenStreetMap Nominatim API-val
       try {
