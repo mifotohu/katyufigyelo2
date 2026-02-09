@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -11,7 +10,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    minify: 'esbuild', // Terser helyett esbuild (gyorsabb, nincs extra függőség)
+    minify: 'terser',
     rollupOptions: {
       output: {
         manualChunks: {
@@ -22,7 +21,7 @@ export default defineConfig({
       }
     }
   },
-  // Leaflet asset-ek helyes kezelése Vercel-en
+  // KRITIKUS: Leaflet asset-ek helyes kezelése
   assetsInclude: ['**/*.png', '**/*.svg'],
   optimizeDeps: {
     include: ['leaflet']
