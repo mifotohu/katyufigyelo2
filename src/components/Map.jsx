@@ -96,19 +96,19 @@ const MapClickHandler = ({ onLocationSelect }) => {
     click: async (e) => {
       const { lat, lng } = e.latlng
 
-      // Ellenőrizzük, hogy Magyarország területén van-e
-      if (!isInHungary(lat, lng)) {
+   // Ellenőrizzük, hogy Magyarország területén van-e
+    if (!isInHungary(lat, lng)) {
         // Alert üzenet
         alert('⚠️ Csak Magyarország területén lehet kátyút bejelenteni!\n\n' +
-              'Kérlek, kattints a térképre Magyarország határain belül.')
+                'Kérlek, kattints a térképre Magyarország határain belül.')
         return // NEM hozunk létre markert és NEM nyitjuk meg a form-ot
-      }
-      }
+    } 
+    // <--- INNEN TÖRÖLTÜK KI A FELESLEGES ZÁRÓJELET!
 
-      // Reverse geocoding OpenStreetMap Nominatim API-val
-      try {
+    // Reverse geocoding OpenStreetMap Nominatim API-val
+    try {
         const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
         )
         const data = await response.json()
 
