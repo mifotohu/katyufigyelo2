@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { X, Loader2, MapPin, AlertCircle, CheckCircle } from 'lucide-react'
 import { createPotholeReport } from '../lib/supabaseClient'
+import { canSubmitReport, incrementDailyReportCount, getRemainingReports, getRateLimitMessage } from '../lib/rateLimit'
 
 const ReportForm = ({ location, onClose, onSubmitSuccess }) => {
   const [formData, setFormData] = useState({
@@ -35,6 +36,11 @@ const ReportForm = ({ location, onClose, onSubmitSuccess }) => {
     setError(null)
 
     try {
+      // Rate limit ellenőrzés
+      if (!canSubmitReport()) {
+        throw new Error(getRateLimitMessage())
+      }
+
       // Bejelentés létrehozása (fotó nélkül)
       const reportData = {
         latitude: location.lat,
@@ -51,6 +57,9 @@ const ReportForm = ({ location, onClose, onSubmitSuccess }) => {
       if (createError) {
         throw new Error('Bejelentés létrehozása sikertelen')
       }
+
+      // Sikeres bejelentés - növeljük a napi számlálót
+      incrementDailyReportCount()
 
       // Sikeres bejelentés
       if (location.clearMarker) {
@@ -104,6 +113,13 @@ const ReportForm = ({ location, onClose, onSubmitSuccess }) => {
             <p className="font-semibold text-gray-700 mb-1">📍 Kiválasztott helyszín:</p>
             <p className="text-gray-600">
               {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+            </p>
+          </div>
+
+          {/* Napi limit jelző */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+            <p className="text-blue-800">
+              📊 Még <strong>{getRemainingReports()}/10</strong> bejelentést küldhetsz be ma
             </p>
           </div>
 

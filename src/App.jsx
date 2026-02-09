@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import Header from './components/Header'
-import GeminiApiBanner from './components/GeminiApiBanner'
 import Map from './components/Map'
 import ReportForm from './components/ReportForm'
 import Footer from './components/Footer'
@@ -58,9 +57,6 @@ function App() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <Header />
-
-      {/* Gemini API Banner */}
-      <GeminiApiBanner />
 
       {/* Értesítés */}
       {notification && (

@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 're
 import L from 'leaflet'
 import { MapPin, Loader2 } from 'lucide-react'
 import { getPotholeReports } from '../lib/supabaseClient'
+import InfoPanel from './InfoPanel'
 
 // Fix Leaflet default marker icon issue
 delete L.Icon.Default.prototype._getIconUrl
@@ -73,9 +74,31 @@ const newMarkerIcon = L.divIcon({
 const MapClickHandler = ({ onLocationSelect }) => {
   const [tempMarker, setTempMarker] = useState(null)
 
+  // Magyarország határai (approximate bounding box)
+  const isInHungary = (lat, lng) => {
+    // Magyarország határai (kis pufferrel)
+    const HUNGARY_BOUNDS = {
+      north: 48.6,   // Észak (Szlovákia határ)
+      south: 45.7,   // Dél (Horvátország határ)
+      west: 16.1,    // Nyugat (Ausztria határ)
+      east: 22.9     // Kelet (Ukrajna/Románia határ)
+    }
+    
+    return lat >= HUNGARY_BOUNDS.south && 
+           lat <= HUNGARY_BOUNDS.north && 
+           lng >= HUNGARY_BOUNDS.west && 
+           lng <= HUNGARY_BOUNDS.east
+  }
+
   useMapEvents({
     click: async (e) => {
       const { lat, lng } = e.latlng
+
+      // Ellenőrizzük, hogy Magyarország területén van-e
+      if (!isInHungary(lat, lng)) {
+        alert('⚠️ Csak Magyarország területén lehet kátyút bejelenteni!')
+        return
+      }
 
       // Reverse geocoding OpenStreetMap Nominatim API-val
       try {
@@ -229,7 +252,7 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
   }
 
   return (
-    <div className="relative flex-1 min-h-[60vh]">{/* Minimum 60% viewport magasság */}
+    <div className="relative flex-1 min-h-[75vh]">{/* 75% viewport magasság */}
       {/* Betöltés jelző */}
       {isLoading && (
         <div className="absolute inset-0 bg-white/90 z-[1000] flex items-center justify-center">
@@ -241,6 +264,9 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
       )}
 
       {/* Jelmagyarázat eltávolítva - most a headerben van */}
+
+      {/* Kárbejelentési info panel */}
+      <InfoPanel />
 
       {/* OpenStreetMap Térkép */}
       <MapContainer
