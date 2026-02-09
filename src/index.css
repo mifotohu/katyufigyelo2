@@ -10,15 +10,17 @@
   }
 
   html {
-    @apply h-full overflow-hidden;
+    @apply h-full;
   }
 
   body {
-    @apply h-full m-0 p-0 font-sans antialiased bg-gray-50 overflow-hidden;
+    @apply h-full m-0 p-0 font-sans antialiased bg-gray-50 overflow-x-hidden overflow-y-auto;
+    /* overflow-y-auto: Footer láthatóságához engedélyezzük a függőleges scroll-t */
   }
 
   #root {
-    @apply h-full flex flex-col overflow-hidden;
+    @apply min-h-full flex flex-col;
+    /* min-h-full: Legalább 100%, de lehet több is */
   }
 }
 

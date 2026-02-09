@@ -257,7 +257,7 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
   }
 
   return (
-    <div className="relative flex-1 min-h-[75vh] z-0">{/* z-0 hozzáadva - háttérbe */}
+    <div className="relative flex-1 min-h-[60vh] md:min-h-[65vh] lg:min-h-[68vh] z-0">{/* Csökkentve: 75vh → 60vh mobil, 65vh tablet, 68vh desktop */}
       {/* Betöltés jelző */}
       {isLoading && (
         <div className="absolute inset-0 bg-white/90 z-[1000] flex items-center justify-center">

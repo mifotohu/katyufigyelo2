@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Car } from 'lucide-react'
+import { Car, Info } from 'lucide-react'
 import { getRemainingReports } from '../lib/rateLimit'
 
 const Header = () => {
   const [remaining, setRemaining] = useState(getRemainingReports())
+  const [showTooltip, setShowTooltip] = useState(false)
 
   // Frissítés minden render-nél
   useEffect(() => {
@@ -36,24 +37,51 @@ const Header = () => {
               <span id="total-reports">Betöltés...</span>
             </div>
             
-            {/* Napi limit számláló */}
-            <div className="text-xs md:text-sm font-semibold bg-yellow-500/90 text-gray-900 px-2 py-0.5 md:px-3 md:py-1 rounded whitespace-nowrap">
-              📊 {remaining}/10
+            {/* Napi limit számláló + Tooltip */}
+            <div className="relative flex items-center gap-1">
+              <div className="text-xs md:text-sm font-semibold bg-yellow-500/90 text-gray-900 px-2 py-0.5 md:px-3 md:py-1 rounded whitespace-nowrap">
+                📊 {remaining}/10
+              </div>
+              
+              {/* Info ikon tooltip-tel */}
+              <button
+                onMouseEnter={() => setShowTooltip(true)}
+                onMouseLeave={() => setShowTooltip(false)}
+                onClick={() => setShowTooltip(!showTooltip)}
+                className="p-0.5 hover:bg-white/20 rounded transition-colors"
+                aria-label="Információ"
+              >
+                <Info className="w-3 h-3 md:w-3.5 md:h-3.5" />
+              </button>
+
+              {/* Tooltip */}
+              {showTooltip && (
+                <div className="absolute top-full mt-1 right-0 bg-white text-gray-800 rounded-lg shadow-xl p-2 z-[2000] w-56 text-xs">
+                  <p className="font-semibold mb-1">📊 Napi bejelentési limit</p>
+                  <p className="text-gray-700 leading-tight">
+                    Naponta maximum <strong>10 bejelentést</strong> küldhetsz be. 
+                    A számláló éjfélkor automatikusan reset-elődik.
+                  </p>
+                  <p className="text-gray-600 mt-1 text-xs">
+                    Jelenlegi állapot: <strong>{remaining}/10</strong> maradt
+                  </p>
+                </div>
+              )}
             </div>
             
-            {/* Jelmagyarázat (mindig látható, kompakt mobilon) */}
+            {/* Jelmagyarázat (mindig látható SZÁMOKKAL mobilon is) */}
             <div className="flex items-center gap-1.5 md:gap-2 text-xs">
               <div className="flex items-center gap-0.5 md:gap-1">
                 <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#3B82F6] border border-white"></div>
-                <span className="hidden sm:inline">1-10</span>
+                <span>1-10</span>
               </div>
               <div className="flex items-center gap-0.5 md:gap-1">
                 <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#FBBF24] border border-white"></div>
-                <span className="hidden sm:inline">11-30</span>
+                <span>11-30</span>
               </div>
               <div className="flex items-center gap-0.5 md:gap-1">
                 <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#EF4444] border border-white"></div>
-                <span className="hidden sm:inline">30+</span>
+                <span>30+</span>
               </div>
             </div>
           </div>
