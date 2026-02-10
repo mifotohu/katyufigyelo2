@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 're
 import L from 'leaflet'
 import { MapPin, Loader2 } from 'lucide-react'
 import { getPotholeReports, markAsSolved, incrementReportCount } from '../lib/supabaseClient'
+import { canSubmitReport, incrementDailyReportCount } from '../lib/rateLimit'
 import InfoPanel from './InfoPanel'
 
 // Fix Leaflet default marker icon issue
@@ -192,12 +193,19 @@ const PotholeMarkers = ({ reports, onRefresh }) => {
                     {!report.solved && (
                       <button
                         onClick={async () => {
+                          // Rate limit ellenőrzés
+                          if (!canSubmitReport()) {
+                            alert('⚠️ Elérted a napi limitet (10 bejelentés). Holnap újra próbálkozz!')
+                            return
+                          }
+                          
                           const { data, error } = await incrementReportCount(report.id)
                           if (!error) {
-                            onRefresh && onRefresh()
-                            alert(`✓ Bejelentés megerősítve! (${data.report_count}x)`)
+                            incrementDailyReportCount() // Napi limit levonása
+                            await onRefresh()
+                            setTimeout(() => alert(`✓ Bejelentés megerősítve! (${data.report_count}x)`), 100)
                           } else {
-                            alert('Hiba történt a bejelentés megerősítésénél')
+                            alert('Hiba történt: ' + (error.message || 'Ismeretlen hiba'))
                           }
                         }}
                         className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-2 py-0.5 rounded text-xs transition-colors"
@@ -223,10 +231,10 @@ const PotholeMarkers = ({ reports, onRefresh }) => {
                       if (confirm('Biztosan megoldottnak jelölöd ezt a kátyút?')) {
                         const { data, error } = await markAsSolved(report.id)
                         if (!error) {
-                          onRefresh && onRefresh()
-                          alert('✓ Kátyú sikeresen megoldottnak jelölve!')
+                          await onRefresh()
+                          setTimeout(() => alert('✓ Kátyú sikeresen megoldottnak jelölve!'), 100)
                         } else {
-                          alert('Hiba történt a megoldva jelölésnél')
+                          alert('Hiba történt: ' + (error.message || 'Ismeretlen hiba'))
                         }
                       }
                     }}
