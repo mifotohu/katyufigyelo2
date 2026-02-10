@@ -94,8 +94,8 @@ function App() {
         </div>
       )}
 
-      {/* Térkép - Wrapper max magassággal */}
-      <div className="flex-1 max-h-[55vh] md:max-h-[60vh] lg:max-h-[65vh] overflow-hidden">
+      {/* Térkép - Fix magassággal */}
+      <div className="w-full h-[60vh] md:h-[65vh] lg:h-[68vh]">
         <Map 
           onLocationSelect={handleLocationSelect} 
           refreshTrigger={refreshTrigger}
