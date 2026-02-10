@@ -140,5 +140,31 @@ export const createPotholeReport = async (reportData) => {
     return { data: null, error, isDuplicate: false }
   }
 }
+// src/lib/supabaseClient.js
 
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Ez a rész hiányozhatott vagy hibás volt:
+export const getPotholeReports = async () => {
+  const { data, error } = await supabase
+    .from('potholes') // Ellenőrizd, hogy a táblád neve valóban 'potholes'!
+    .select('*')
+  if (error) throw error
+  return data
+}
+
+// Ezt kereste a Vercel és nem találta:
+export const markAsSolved = async (id) => {
+  const { data, error } = await supabase
+    .from('potholes')
+    .update({ status: 'solved' }) // Feltételezzük, hogy van 'status' oszlopod
+    .eq('id', id)
+  if (error) throw error
+  return data
+}
 // Fotó feltöltés törölve - nincs rá szükség az új verzióban
