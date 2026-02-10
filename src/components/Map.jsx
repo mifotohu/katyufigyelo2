@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { MapPin, Loader2 } from 'lucide-react'
-import { getPotholeReports, markAsSolved } from '../lib/supabaseClient'
+import { getPotholeReports, markAsSolved, incrementReportCount } from '../lib/supabaseClient'
 import InfoPanel from './InfoPanel'
 
 // Fix Leaflet default marker icon issue
@@ -157,7 +157,7 @@ const MapClickHandler = ({ onLocationSelect }) => {
 }
 
 // Pothole markerek komponens
-const PotholeMarkers = ({ reports, onMarkAsSolved }) => {
+const PotholeMarkers = ({ reports, onRefresh }) => {
   if (!reports || reports.length === 0) return null
 
   return (
@@ -186,7 +186,27 @@ const PotholeMarkers = ({ reports, onMarkAsSolved }) => {
                 <p className="text-sm text-gray-700 mb-2">{report.address}</p>
                 <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
                   <span>📍 {report.position_on_road}</span>
-                  <span className="font-semibold">{report.report_count}x bejelentve</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{report.report_count}x bejelentve</span>
+                    {/* +1 gomb - számláló növelése */}
+                    {!report.solved && (
+                      <button
+                        onClick={async () => {
+                          const { data, error } = await incrementReportCount(report.id)
+                          if (!error) {
+                            onRefresh && onRefresh()
+                            alert(`✓ Bejelentés megerősítve! (${data.report_count}x)`)
+                          } else {
+                            alert('Hiba történt a bejelentés megerősítésénél')
+                          }
+                        }}
+                        className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-2 py-0.5 rounded text-xs transition-colors"
+                        title="Bejelentés megerősítése (+1)"
+                      >
+                        +1
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-xs text-gray-500 mb-2">
                   {new Date(report.created_at).toLocaleDateString('hu-HU', {
@@ -196,11 +216,21 @@ const PotholeMarkers = ({ reports, onMarkAsSolved }) => {
                   })}
                 </p>
                 
-                {/* Megoldva gomb - csak ha még nincs megoldva */}
+                {/* Gombok: Megoldva */}
                 {!report.solved && (
                   <button
-                    onClick={() => onMarkAsSolved(report.id)}
-                    className="w-full mt-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-1.5 px-3 rounded text-xs transition-colors flex items-center justify-center gap-1"
+                    onClick={async () => {
+                      if (confirm('Biztosan megoldottnak jelölöd ezt a kátyút?')) {
+                        const { data, error } = await markAsSolved(report.id)
+                        if (!error) {
+                          onRefresh && onRefresh()
+                          alert('✓ Kátyú sikeresen megoldottnak jelölve!')
+                        } else {
+                          alert('Hiba történt a megoldva jelölésnél')
+                        }
+                      }
+                    }}
+                    className="w-full mt-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-1.5 px-3 rounded text-sm transition-colors flex items-center justify-center gap-1"
                   >
                     ✓ Megoldva
                   </button>
@@ -260,24 +290,6 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
     setIsLoading(false)
   }
 
-  // Megoldva jelölés kezelése
-  const handleMarkAsSolved = async (reportId) => {
-    const confirmed = window.confirm('Biztosan megoldottnak jelölöd ezt a kátyút?\n\nEz a művelet nem visszavonható!')
-    
-    if (!confirmed) return
-
-    const { data, error } = await markAsSolved(reportId)
-    
-    if (error) {
-      alert('Hiba történt a mentésnél. Próbáld újra!')
-      return
-    }
-
-    // Frissítjük a térképet
-    await loadPotholeReports()
-    alert('✓ Kátyú sikeresen megoldottnak jelölve!')
-  }
-
   useEffect(() => {
     loadPotholeReports()
   }, [refreshTrigger])
@@ -329,7 +341,7 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
         />
         
         <MapClickHandler onLocationSelect={onLocationSelect} />
-        <PotholeMarkers reports={reports} onMarkAsSolved={handleMarkAsSolved} />
+        <PotholeMarkers reports={reports} onRefresh={loadPotholeReports} />
         <StatsUpdater reports={reports} />
       </MapContainer>
     </div>
