@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { MapPin, Loader2 } from 'lucide-react'
-import { getPotholeReports } from '../lib/supabaseClient'
+import { getPotholeReports, markAsSolved } from '../lib/supabaseClient'
 import InfoPanel from './InfoPanel'
 
 // Fix Leaflet default marker icon issue
@@ -14,21 +14,25 @@ L.Icon.Default.mergeOptions({
 })
 
 // Marker színek bejelentések száma alapján - ÚJ SZABÁLY
-const getMarkerColor = (reportCount) => {
+const getMarkerColor = (reportCount, isSolved) => {
+  if (isSolved) return '#10B981' // Zöld - Megoldva!
   if (reportCount > 30) return '#EF4444' // Piros - 30+ bejelentés
   if (reportCount >= 11) return '#FBBF24'  // Sárga - 11-30 bejelentés
   return '#3B82F6' // Kék - 1-10 bejelentés
 }
 
-const getMarkerLabel = (reportCount) => {
+const getMarkerLabel = (reportCount, isSolved) => {
+  if (isSolved) return 'MEGOLDVA ✓'
   if (reportCount > 30) return 'VESZÉLYES!'
   if (reportCount >= 11) return 'Figyelem'
   return 'Bejelentve'
 }
 
 // Custom marker icon factory
-const createCustomIcon = (color, count) => {
-  const size = 20 + (count * 2)
+const createCustomIcon = (color, count, isSolved) => {
+  const size = isSolved ? 28 : (20 + (count * 2))
+  const displayText = isSolved ? '✓' : count
+  
   return L.divIcon({
     className: 'custom-marker',
     html: `
@@ -44,8 +48,8 @@ const createCustomIcon = (color, count) => {
         justify-content: center;
         font-weight: bold;
         color: white;
-        font-size: 10px;
-      ">${count}</div>
+        font-size: ${isSolved ? '16px' : '10px'};
+      ">${displayText}</div>
     `,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
@@ -103,7 +107,6 @@ const MapClickHandler = ({ onLocationSelect }) => {
               'Kérlek, kattints a térképre Magyarország határain belül.')
         return // NEM hozunk létre markert és NEM nyitjuk meg a form-ot
       }
-      
 
       // Reverse geocoding OpenStreetMap Nominatim API-val
       try {
@@ -154,15 +157,15 @@ const MapClickHandler = ({ onLocationSelect }) => {
 }
 
 // Pothole markerek komponens
-const PotholeMarkers = ({ reports }) => {
+const PotholeMarkers = ({ reports, onMarkAsSolved }) => {
   if (!reports || reports.length === 0) return null
 
   return (
     <>
       {reports.map((report) => {
-        const markerColor = getMarkerColor(report.report_count)
-        const markerLabel = getMarkerLabel(report.report_count)
-        const icon = createCustomIcon(markerColor, report.report_count)
+        const markerColor = getMarkerColor(report.report_count, report.solved)
+        const markerLabel = getMarkerLabel(report.report_count, report.solved)
+        const icon = createCustomIcon(markerColor, report.report_count, report.solved)
 
         return (
           <Marker
@@ -181,17 +184,34 @@ const PotholeMarkers = ({ reports }) => {
                 </div>
                 <h3 className="font-bold text-base mb-2">{report.city}</h3>
                 <p className="text-sm text-gray-700 mb-2">{report.address}</p>
-                <div className="flex items-center justify-between text-xs text-gray-600">
+                <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
                   <span>📍 {report.position_on_road}</span>
                   <span className="font-semibold">{report.report_count}x bejelentve</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-gray-500 mb-2">
                   {new Date(report.created_at).toLocaleDateString('hu-HU', {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
                   })}
                 </p>
+                
+                {/* Megoldva gomb - csak ha még nincs megoldva */}
+                {!report.solved && (
+                  <button
+                    onClick={() => onMarkAsSolved(report.id)}
+                    className="w-full mt-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-1.5 px-3 rounded text-xs transition-colors flex items-center justify-center gap-1"
+                  >
+                    ✓ Megoldva
+                  </button>
+                )}
+                
+                {/* Megoldva státusz */}
+                {report.solved && report.solved_at && (
+                  <div className="mt-2 bg-green-50 border border-green-200 rounded p-2 text-xs text-green-800">
+                    ✓ Megoldva: {new Date(report.solved_at).toLocaleDateString('hu-HU')}
+                  </div>
+                )}
               </div>
             </Popup>
           </Marker>
@@ -240,6 +260,24 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
     setIsLoading(false)
   }
 
+  // Megoldva jelölés kezelése
+  const handleMarkAsSolved = async (reportId) => {
+    const confirmed = window.confirm('Biztosan megoldottnak jelölöd ezt a kátyút?\n\nEz a művelet nem visszavonható!')
+    
+    if (!confirmed) return
+
+    const { data, error } = await markAsSolved(reportId)
+    
+    if (error) {
+      alert('Hiba történt a mentésnél. Próbáld újra!')
+      return
+    }
+
+    // Frissítjük a térképet
+    await loadPotholeReports()
+    alert('✓ Kátyú sikeresen megoldottnak jelölve!')
+  }
+
   useEffect(() => {
     loadPotholeReports()
   }, [refreshTrigger])
@@ -282,7 +320,7 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
         zoom={7}
         minZoom={6}
         maxZoom={18}
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: '100%', width: '100%', minHeight: '400px' }}
         zoomControl={true}
       >
         <TileLayer
@@ -291,7 +329,7 @@ const Map = ({ onLocationSelect, refreshTrigger }) => {
         />
         
         <MapClickHandler onLocationSelect={onLocationSelect} />
-        <PotholeMarkers reports={reports} />
+        <PotholeMarkers reports={reports} onMarkAsSolved={handleMarkAsSolved} />
         <StatsUpdater reports={reports} />
       </MapContainer>
     </div>
