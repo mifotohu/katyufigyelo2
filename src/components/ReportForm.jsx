@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { X, Loader2, MapPin, AlertCircle, CheckCircle } from 'lucide-react'
-import { createPotholeReport } from '../lib/supabaseClient'
-import { canSubmitReport, incrementDailyReportCount, getRemainingReports, getRateLimitMessage } from '../lib/rateLimit'
+import { getRemainingReports } from '../lib/rateLimit'
 
 const ReportForm = ({ location, onClose, onSubmitSuccess }) => {
   const [formData, setFormData] = useState({
@@ -36,12 +35,6 @@ const ReportForm = ({ location, onClose, onSubmitSuccess }) => {
     setError(null)
 
     try {
-      // Rate limit ellenőrzés
-      if (!canSubmitReport()) {
-        throw new Error(getRateLimitMessage())
-      }
-
-      // Bejelentés létrehozása (fotó nélkül)
       const reportData = {
         latitude: location.lat,
         longitude: location.lng,
@@ -52,22 +45,29 @@ const ReportForm = ({ location, onClose, onSubmitSuccess }) => {
         report_count: 1
       }
 
-      const { data, error: createError, isDuplicate } = await createPotholeReport(reportData)
+      // Szerver-oldali API hívás (IP rate limiting)
+      const response = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reportData)
+      })
 
-      if (createError) {
-        throw new Error('Bejelentés létrehozása sikertelen')
+      const result = await response.json()
+
+      if (response.status === 429) {
+        // Rate limit vagy tiltás
+        throw new Error(result.message || 'Napi limit elérve. Holnap újra próbálhatsz.')
       }
 
-      // Sikeres bejelentés - növeljük a napi számlálót
-      incrementDailyReportCount()
+      if (!response.ok) {
+        throw new Error(result.error || 'Bejelentés létrehozása sikertelen')
+      }
 
-      // Sikeres bejelentés
       if (location.clearMarker) {
         location.clearMarker()
       }
 
-      // Sikeres visszajelzés
-      onSubmitSuccess(isDuplicate)
+      onSubmitSuccess(result.isDuplicate)
       
     } catch (err) {
       console.error('Bejelentési hiba:', err)

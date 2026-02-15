@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { MapPin, Loader2 } from 'lucide-react'
-import { getPotholeReports, markAsSolved, incrementReportCount } from '../lib/supabaseClient'
-import { canSubmitReport, incrementDailyReportCount } from '../lib/rateLimit'
+import { getPotholeReports } from '../lib/supabaseClient'
 import InfoPanel from './InfoPanel'
 
 // Fix Leaflet default marker icon issue
@@ -193,20 +192,23 @@ const PotholeMarkers = ({ reports, onRefresh }) => {
                     {!report.solved && (
                       <button
                         onClick={async () => {
-                          // Rate limit ellenőrzés
-                          if (!canSubmitReport()) {
-                            alert('⚠️ Elérted a napi limitet (10 bejelentés). Holnap újra próbálkozz!')
+                          const response = await fetch('/api/increment', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reportId: report.id })
+                          })
+                          const result = await response.json()
+
+                          if (response.status === 429) {
+                            alert('⚠️ ' + result.message)
                             return
                           }
-                          
-                          const { data, error } = await incrementReportCount(report.id)
-                          if (!error) {
-                            incrementDailyReportCount() // Napi limit levonása
-                            await onRefresh()
-                            setTimeout(() => alert(`✓ Bejelentés megerősítve! (${data.report_count}x)`), 100)
-                          } else {
-                            alert('Hiba történt: ' + (error.message || 'Ismeretlen hiba'))
+                          if (!response.ok) {
+                            alert('Hiba: ' + (result.error || 'Ismeretlen hiba'))
+                            return
                           }
+                          await onRefresh()
+                          setTimeout(() => alert(`✓ Bejelentés megerősítve! (${result.data.report_count}x)`), 100)
                         }}
                         className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-2 py-0.5 rounded text-xs transition-colors"
                         title="Bejelentés megerősítése (+1)"
@@ -229,13 +231,19 @@ const PotholeMarkers = ({ reports, onRefresh }) => {
                   <button
                     onClick={async () => {
                       if (confirm('Biztosan megoldottnak jelölöd ezt a kátyút?')) {
-                        const { data, error } = await markAsSolved(report.id)
-                        if (!error) {
-                          await onRefresh()
-                          setTimeout(() => alert('✓ Kátyú sikeresen megoldottnak jelölve!'), 100)
-                        } else {
-                          alert('Hiba történt: ' + (error.message || 'Ismeretlen hiba'))
+                        const response = await fetch('/api/solve', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ reportId: report.id })
+                        })
+                        const result = await response.json()
+
+                        if (!response.ok) {
+                          alert('Hiba: ' + (result.error || 'Ismeretlen hiba'))
+                          return
                         }
+                        await onRefresh()
+                        setTimeout(() => alert('✓ Kátyú sikeresen megoldottnak jelölve!'), 100)
                       }
                     }}
                     className="w-full mt-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-1.5 px-3 rounded text-sm transition-colors flex items-center justify-center gap-1"
