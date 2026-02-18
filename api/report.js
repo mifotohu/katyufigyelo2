@@ -1,21 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
-// Supabase SERVICE ROLE kliens (szerver oldali, teljes hozzáférés)
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY  // Service role key - NEM az anon key!
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-const DAILY_LIMIT = 10        // Max bejelentés naponta IP-nként
-const BLOCK_THRESHOLD = 15    // Ennyi felett azonnali tiltás
+// ═══════════════════════════════════════════════════════════════
+// LIMITEK - Itt állítsd be a szigorúságot
+// ═══════════════════════════════════════════════════════════════
+const DAILY_LIMIT = 10              // Napi max bejelentés
+const BURST_LIMIT = 5               // Max ennyi bejelentés...
+const BURST_WINDOW = 60             // ...ennyi másodperc alatt
+const INSTANT_BLOCK_COUNT = 10      // Ha ennyi kérés jön egyszerre → azonnali tiltás
+const TOTAL_BLOCK_THRESHOLD = 30    // Összesen ennyi bejelentés után állandó tiltás
 
-// IP hash (GDPR: nem tároljuk nyersen az IP-t)
 function hashIP(ip) {
   return crypto.createHash('sha256').update(ip + process.env.IP_HASH_SALT).digest('hex')
 }
 
-// Kliens IP kinyerése (Vercel proxy-n keresztül)
 function getClientIP(req) {
   return (
     req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
@@ -25,68 +28,134 @@ function getClientIP(req) {
   )
 }
 
+function isNewDay(lastDate) {
+  const today = new Date().toISOString().split('T')[0]
+  return lastDate !== today
+}
+
+// Burst védelem: utolsó N másodpercben hány kérés érkezett
+function checkBurst(recentRequests, windowSeconds) {
+  const now = Date.now()
+  const windowMs = windowSeconds * 1000
+  
+  // Csak az utolsó N másodpercben lévő kéréseket tartjuk
+  const validRequests = recentRequests.filter(ts => (now - ts) <= windowMs)
+  
+  return {
+    count: validRequests.length,
+    timestamps: validRequests
+  }
+}
+
 export default async function handler(req, res) {
-  // Csak POST kérés engedélyezett
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
   const ip = getClientIP(req)
   const ipHash = hashIP(ip)
-  const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+  const today = new Date().toISOString().split('T')[0]
+  const now = Date.now()
 
   try {
-    // ─── 1. Rate Limit Ellenőrzés ───────────────────────────────────
-    const { data: limitRecord, error: limitError } = await supabase
+    // ═══════════════════════════════════════════════════════════
+    // 1. IP REKORD LEKÉRÉSE
+    // ═══════════════════════════════════════════════════════════
+    const { data: ipRecord } = await supabase
       .from('ip_rate_limits')
-      .select('count, blocked')
+      .select('*')
       .eq('ip_hash', ipHash)
-      .eq('date', today)
       .maybeSingle()
 
-    // Ha le van tiltva
-    if (limitRecord?.blocked) {
+    // ═══════════════════════════════════════════════════════════
+    // 2. ÁLLANDÓ TILTÁS ELLENŐRZÉSE
+    // ═══════════════════════════════════════════════════════════
+    if (ipRecord?.blocked) {
+      console.log(`🚫 Tiltott IP próbálkozik: ${ipHash.substring(0, 8)}...`)
       return res.status(429).json({
         error: 'blocked',
-        message: 'Ez az IP-cím le van tiltva. Gyanús aktivitás miatt blokkolva.'
+        message: 'Ez az IP-cím véglegesen le van tiltva spam aktivitás miatt.'
       })
     }
 
-    // Ha elérte a napi limitet
-    if (limitRecord && limitRecord.count >= DAILY_LIMIT) {
+    // ═══════════════════════════════════════════════════════════
+    // 3. BURST VÉDELEM - Túl sok kérés rövid időn belül?
+    // ═══════════════════════════════════════════════════════════
+    let recentRequests = ipRecord?.recent_requests || []
+    if (typeof recentRequests === 'string') {
+      recentRequests = JSON.parse(recentRequests)
+    }
+    
+    const burst = checkBurst(recentRequests, BURST_WINDOW)
+    
+    // Ha túl sok kérés van rövid időn belül → AZONNALI TILTÁS
+    if (burst.count >= INSTANT_BLOCK_COUNT) {
+      console.log(`⚠️ BURST ATTACK: ${burst.count} kérés ${BURST_WINDOW} másodperc alatt! IP: ${ipHash.substring(0, 8)}...`)
+      
+      await supabase
+        .from('ip_rate_limits')
+        .upsert({
+          ip_hash: ipHash,
+          blocked: true,
+          blocked_at: new Date().toISOString(),
+          blocked_reason: `Automatikus tiltás: ${burst.count} kérés ${BURST_WINDOW} másodperc alatt (bot/spam)`,
+          last_request_at: new Date().toISOString()
+        }, { onConflict: 'ip_hash' })
+
       return res.status(429).json({
-        error: 'rate_limit',
+        error: 'blocked',
+        message: 'Túl sok kérés rövid időn belül. Az IP-cím le lett tiltva.'
+      })
+    }
+
+    // Ha közel van a burst limithez → figyelmeztető
+    if (burst.count >= BURST_LIMIT) {
+      return res.status(429).json({
+        error: 'burst_limit',
+        message: `Lassíts! Maximum ${BURST_LIMIT} bejelentés ${BURST_WINDOW} másodperc alatt.`
+      })
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 4. NAPI LIMIT ELLENŐRZÉSE
+    // ═══════════════════════════════════════════════════════════
+    let dailyCount = 1
+
+    if (ipRecord) {
+      if (isNewDay(ipRecord.last_date)) {
+        dailyCount = 1  // Új nap → reset
+      } else {
+        dailyCount = ipRecord.daily_count + 1
+      }
+    }
+
+    if (dailyCount > DAILY_LIMIT) {
+      return res.status(429).json({
+        error: 'daily_limit',
         message: `Napi limit elérve (${DAILY_LIMIT} bejelentés). Holnap újra próbálhatsz.`,
         remaining: 0
       })
     }
 
-    // ─── 2. Azonnali Tiltás Ha Spam (BLOCK_THRESHOLD felett) ───────
-    if (limitRecord && limitRecord.count >= BLOCK_THRESHOLD) {
-      await supabase
-        .from('ip_rate_limits')
-        .update({ 
-          blocked: true,
-          last_request_at: new Date().toISOString()
-        })
-        .eq('ip_hash', ipHash)
-        .eq('date', today)
+    // ═══════════════════════════════════════════════════════════
+    // 5. ÖSSZESÍTETT TILTÁS (túl sok összesen)
+    // ═══════════════════════════════════════════════════════════
+    const totalCount = (ipRecord?.total_count || 0) + 1
+    const shouldPermanentBlock = totalCount >= TOTAL_BLOCK_THRESHOLD
 
-      return res.status(429).json({
-        error: 'blocked',
-        message: 'Gyanús aktivitás miatt az IP-cím le lett tiltva.'
-      })
+    if (shouldPermanentBlock) {
+      console.log(`⚠️ TOTAL LIMIT: ${totalCount} összesen! IP: ${ipHash.substring(0, 8)}...`)
     }
 
-    // ─── 3. Bejelentés Feldolgozása ─────────────────────────────────
+    // ═══════════════════════════════════════════════════════════
+    // 6. BEJELENTÉS FELDOLGOZÁSA
+    // ═══════════════════════════════════════════════════════════
     const reportData = req.body
 
-    // Validáció
     if (!reportData?.latitude || !reportData?.longitude || !reportData?.address) {
       return res.status(400).json({ error: 'Hiányos adatok' })
     }
 
-    // Koordináta validáció (Magyarország határai)
     const lat = parseFloat(reportData.latitude)
     const lng = parseFloat(reportData.longitude)
     const inHungary = lat >= 45.74 && lat <= 48.585 && lng >= 16.11 && lng <= 22.90
@@ -95,7 +164,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'A koordináta Magyarország határain kívül van' })
     }
 
-    // Duplikáció ellenőrzés (azonos cím)
+    // Duplikáció ellenőrzés
     const { data: existing } = await supabase
       .from('pothole_reports')
       .select('id, report_count')
@@ -106,7 +175,6 @@ export default async function handler(req, res) {
     let isDuplicate = false
 
     if (existing) {
-      // Meglévő bejelentés számláló növelése
       const { data, error } = await supabase
         .from('pothole_reports')
         .update({
@@ -117,12 +185,10 @@ export default async function handler(req, res) {
         .eq('id', existing.id)
         .select()
         .single()
-
       if (error) throw error
       result = data
       isDuplicate = true
     } else {
-      // Helyszín duplikáció (50m-en belül)
       const { data: nearby } = await supabase
         .from('pothole_reports')
         .select('id, report_count')
@@ -143,12 +209,10 @@ export default async function handler(req, res) {
           .eq('id', nearby.id)
           .select()
           .single()
-
         if (error) throw error
         result = data
         isDuplicate = true
       } else {
-        // Teljesen új bejelentés
         const { data, error } = await supabase
           .from('pothole_reports')
           .insert([{
@@ -158,44 +222,37 @@ export default async function handler(req, res) {
           }])
           .select()
           .single()
-
         if (error) throw error
         result = data
       }
     }
 
-    // ─── 4. Rate Limit Számláló Növelése ────────────────────────────
-    const newCount = (limitRecord?.count || 0) + 1
+    // ═══════════════════════════════════════════════════════════
+    // 7. IP REKORD FRISSÍTÉSE
+    // ═══════════════════════════════════════════════════════════
+    const updatedRequests = [...burst.timestamps, now].slice(-20)  // Max 20 timestamp tárolása
 
-    if (limitRecord) {
-      // Meglévő rekord frissítése
-      await supabase
-        .from('ip_rate_limits')
-        .update({
-          count: newCount,
-          last_request_at: new Date().toISOString()
+    await supabase
+      .from('ip_rate_limits')
+      .upsert({
+        ip_hash: ipHash,
+        daily_count: isNewDay(ipRecord?.last_date) ? 1 : dailyCount,
+        last_date: today,
+        total_count: totalCount,
+        recent_requests: JSON.stringify(updatedRequests),
+        last_request_at: new Date().toISOString(),
+        first_request_at: ipRecord?.first_request_at || new Date().toISOString(),
+        ...(shouldPermanentBlock && {
+          blocked: true,
+          blocked_at: new Date().toISOString(),
+          blocked_reason: `Automatikus tiltás: ${totalCount} összesített bejelentés`
         })
-        .eq('ip_hash', ipHash)
-        .eq('date', today)
-    } else {
-      // Új rekord létrehozása
-      await supabase
-        .from('ip_rate_limits')
-        .insert([{
-          ip_hash: ipHash,
-          date: today,
-          count: 1
-        }])
-    }
+      }, { onConflict: 'ip_hash' })
 
-    // ─── 5. Válasz ──────────────────────────────────────────────────
     return res.status(200).json({
       data: result,
       isDuplicate,
-      remaining: DAILY_LIMIT - newCount,
-      message: isDuplicate
-        ? 'Bejelentés megerősítve!'
-        : 'Bejelentés sikeresen elküldve!'
+      remaining: DAILY_LIMIT - dailyCount
     })
 
   } catch (error) {
