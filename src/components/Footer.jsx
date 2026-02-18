@@ -66,8 +66,7 @@ const Footer = () => {
           <p className="text-xs text-green-300 flex items-start gap-2">
             <span className="text-green-400 text-sm flex-shrink-0">🔒</span>
             <span>
-              <strong className="text-green-200">Adatvédelem:</strong> Semmilyen személyes adatot nem kérünk be, 
-              IP címet nem tárolunk. A bejelentés teljesen anonim módon történik.
+              <strong className="text-green-200">Adatvédelem:</strong> Semmilyen személyes adatot nem kérünk be. A bejelentés teljesen anonim módon történik.
             </span>
           </p>
         </div>
