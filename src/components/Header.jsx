@@ -1,18 +1,39 @@
 import React, { useState, useEffect } from 'react'
-import { Car, Info } from 'lucide-react'
-import { getRemainingReports } from '../lib/rateLimit'
+import { Car } from 'lucide-react'
 
 const Header = () => {
-  const [remaining, setRemaining] = useState(getRemainingReports())
-  const [showTooltip, setShowTooltip] = useState(false)
+  const [remaining, setRemaining] = useState(10)
+  const [loading, setLoading] = useState(true)
 
-  // Frissítés minden render-nél
+  // Szerver-oldali limit lekérdezése
+  const fetchRateLimit = async () => {
+    try {
+      const response = await fetch('/api/rate-limit-status')
+      if (response.ok) {
+        const data = await response.json()
+        setRemaining(data.remaining || 10)
+      }
+    } catch (error) {
+      console.error('Rate limit fetch error:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      setRemaining(getRemainingReports())
-    }, 1000) // Másodpercenként ellenőriz
-
+    fetchRateLimit()
+    // 30 másodpercenként frissítés
+    const interval = setInterval(fetchRateLimit, 30000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Egyedi esemény amikor új bejelentés történt
+  useEffect(() => {
+    const handleReportSubmit = () => {
+      fetchRateLimit() // Azonnal frissítés
+    }
+    window.addEventListener('reportSubmitted', handleReportSubmit)
+    return () => window.removeEventListener('reportSubmitted', handleReportSubmit)
   }, [])
 
   return (
@@ -37,40 +58,14 @@ const Header = () => {
               <span id="total-reports">Betöltés...</span>
             </div>
             
-            {/* Napi limit számláló + Szöveges magyarázat */}
+            {/* Napi limit számláló */}
             <div className="flex items-center gap-1.5">
               <div className="text-xs md:text-sm font-semibold bg-yellow-500/90 text-gray-900 px-2 py-0.5 md:px-3 md:py-1 rounded">
-                📊 {remaining}/10 · Naponta max. 10
+                {loading ? '⏳' : '📊'} {remaining}/10 · Naponta max. 10
               </div>
-              
-              {/* Szöveges magyarázat (mindig látható) */}
-              <span className="text-xs hidden sm:inline whitespace-nowrap opacity-90">
-                Naponta max. 10 bejelentés
-              </span>
-              
-              {/* Info ikon tooltip-tel (opcionális részletek) */}
-              <button
-                onMouseEnter={() => setShowTooltip(true)}
-                onMouseLeave={() => setShowTooltip(false)}
-                onClick={() => setShowTooltip(!showTooltip)}
-                className="p-0.5 hover:bg-white/20 rounded transition-colors hidden md:block"
-                aria-label="Információ"
-              >
-                <Info className="w-3 h-3 md:w-3.5 md:h-3.5" />
-              </button>
-
-              {/* Tooltip */}
-              {showTooltip && (
-                <div className="absolute top-full mt-1 right-0 bg-white text-gray-800 rounded-lg shadow-xl p-2 z-[2000] w-56 text-xs">
-                  <p className="font-semibold mb-1">📊 Napi bejelentési limit</p>
-                  <p className="text-gray-700 leading-tight">
-                    A számláló éjfélkor automatikusan reset-elődik.
-                  </p>
-                </div>
-              )}
             </div>
             
-            {/* Jelmagyarázat (mindig látható SZÁMOKKAL mobilon is) */}
+            {/* Jelmagyarázat */}
             <div className="flex items-center gap-1.5 md:gap-2 text-xs">
               <div className="flex items-center gap-0.5 md:gap-1">
                 <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#3B82F6] border border-white"></div>
@@ -87,7 +82,7 @@ const Header = () => {
             </div>
           </div>
 
-          {/* Jobb oldal: Rövid leírás (csak desktop-on) */}
+          {/* Jobb oldal: Rövid leírás */}
           <div className="hidden lg:block text-xs max-w-[240px] text-right leading-tight opacity-90">
             Közösségi platform úthibák bejelentésére
           </div>
